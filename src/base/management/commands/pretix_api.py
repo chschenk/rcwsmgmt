@@ -11,12 +11,24 @@ class PretixAPI:
 			"Authorization": f"Token {token}"
 		}
 
+	def get_json(self, url):
+		response = requests.get(url, headers=self.headers)
+		try:
+			response.raise_for_status()
+		except requests.HTTPError as exc:
+			raise requests.HTTPError(
+				f"Pretix API request failed for {url}: {response.status_code} {response.text}",
+				response=response,
+				request=response.request,
+			) from exc
+		return response.json()
+
 	def get_paginated_result(self, url):
 		results = list()
-		response = requests.get(url, headers=self.headers).json()
+		response = self.get_json(url)
 		results.extend(response['results'])
 		while response['next'] is not None:
-			response = requests.get(response['next'], headers=self.headers).json()
+			response = self.get_json(response['next'])
 			results.extend(response['results'])
 		return results
 

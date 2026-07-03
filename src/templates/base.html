@@ -19,8 +19,8 @@
   <body>
     <nav class="navbar navbar-expand-lg bg-dark">
       <a class="navbar-brand text-white col-sm-3 col-md-2 me-0" href="/">RCWSMGMT</a>
-      {% if user.is_authenticated %}
       <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+        {% if user.is_authenticated %}
         <li class="nav-item">
           <a class="nav-link text-white" href="{% url 'workshop-list' %}">Workshops</a>
         </li>
@@ -33,10 +33,21 @@
         <li class="nav-item">
           <a class="nav-link text-white" href="{% url 'printbatch-list' %}">Druckaufträge</a>
         </li>
+        {% if user.is_superuser %}
+        <li class="nav-item">
+          <a class="nav-link text-white" href="{% url 'runtime-settings' %}">Einstellungen</a>
+        </li>
+        {% endif %}
         {% endif %}
         <li class="nav-item">
+          <a class="nav-link text-white" href="{% url 'vote' %}">Abstimmen</a>
+        </li>
+        <li class="nav-item ms-2">
           {% if user.is_authenticated %}
-            <a class="nav-link text-white" href="{% url 'logout' %}">Logout</a>
+            <form method="post" action="{% url 'logout' %}" class="d-inline">
+              {% csrf_token %}
+              <a href="#" class="nav-link text-white" onclick="event.preventDefault(); this.closest('form').submit();">Logout</a>
+            </form>
           {% else %}
             <a class="nav-link text-white" href="{% url 'login' %}">Login</a>
           {% endif %}
@@ -57,12 +68,13 @@
             <h1 class="h1">{% block header %}{% endblock %}</h1>
             <div class="btn-toolbar mb-2 mb-md-0">
               <div class="btn-group me-2">
-				  {% block actions %}{% endblock %}
+                {% block actions %}{% endblock %}
               </div>
             </div>
           </div>
-			{% bootstrap_messages %}
-			{% block body %}{% endblock %}
+          {% bootstrap_messages %}
+          {% block content %}{% endblock %}
+          {% block body %}{% endblock %}
         </main>
       </div>
     </div>

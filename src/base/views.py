@@ -1,19 +1,91 @@
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.mixins import UserPassesTestMixin
 from django.conf import settings
+from django.core.management import call_command
 from django.core.mail import send_mail
+from django.db import transaction
 from django.db.models import Max
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse, HttpResponseRedirect
 from django.views.generic import ListView, DetailView, FormView, View, UpdateView, CreateView, DeleteView
 from django.views.generic.base import RedirectView
 from django.shortcuts import get_object_or_404
 from django.template.loader import render_to_string
+from django.shortcuts import redirect, render
 from django.urls import reverse, reverse_lazy
 from io import BytesIO
+from django.views.decorators.csrf import csrf_exempt
 from xlsxwriter import Workbook
-from base.models import  Workshop, Order, LogEntry, WorkshopPrintBatch, WorkshopList
+from base.models import  Workshop, Order, LogEntry, WorkshopPrintBatch, WorkshopList, Participant, RuntimeSetting
 from base.forms import WorkshopFeedbackForm, WorkshopAnnotateForm, WorkshopPrintForm, WorkshopAddToListForm
 from base.forms import WorkshopRemoveFromListForm
+from base.forms import RuntimeSettingsForm
+import math
+
+
+class SuperuserRequiredMixin(UserPassesTestMixin):
+	def test_func(self):
+		return self.request.user.is_superuser
+
+
+class RuntimeSettingsView(LoginRequiredMixin, SuperuserRequiredMixin, FormView):
+	form_class = RuntimeSettingsForm
+	template_name = "base/runtime_settings.html"
+
+	def get_initial(self):
+		initial = super().get_initial()
+		initial['auto_sync_enabled'] = RuntimeSetting.objects.filter(key='AUTO_SYNC_ENABLED').values_list('value', flat=True).first() != '0'
+		initial['pretix_event'] = RuntimeSetting.objects.filter(key='PRETIX_EVENT').values_list('value', flat=True).first() or settings.PRETIX_EVENT
+		initial['pretix_auth_token'] = RuntimeSetting.objects.filter(key='PRETIX_AUTH_TOKEN').values_list('value', flat=True).first() or settings.PRETIX_AUTH_TOKEN
+		initial['pretix_workshop_product_id'] = RuntimeSetting.objects.filter(key='PRETIX_WORKSHOP_PRODUCT_ID').values_list('value', flat=True).first() or settings.PRETIX_WORKSHOP_PRODUCT_ID
+		initial['pretix_order_clan_product_id'] = RuntimeSetting.objects.filter(key='PRETIX_ORDER_CLAN_PRODUCT_ID').values_list('value', flat=True).first() or settings.PRETIX_ORDER_CLAN_PRODUCT_ID
+		return initial
+
+	def form_valid(self, form):
+		settings_map = {
+			'AUTO_SYNC_ENABLED': '1' if form.cleaned_data['auto_sync_enabled'] else '0',
+			'PRETIX_EVENT': form.cleaned_data['pretix_event'],
+			'PRETIX_AUTH_TOKEN': form.cleaned_data['pretix_auth_token'],
+			'PRETIX_WORKSHOP_PRODUCT_ID': str(form.cleaned_data['pretix_workshop_product_id']),
+			'PRETIX_ORDER_CLAN_PRODUCT_ID': str(form.cleaned_data['pretix_order_clan_product_id']),
+		}
+		for key, value in settings_map.items():
+			RuntimeSetting.objects.update_or_create(key=key, defaults={'value': value})
+		messages.success(self.request, 'Laufzeit-Einstellungen wurden gespeichert.')
+		return super().form_valid(form)
+
+	def get_success_url(self):
+		return reverse('runtime-settings')
+
+	def handle_no_permission(self):
+		return redirect('workshop-list')
+
+
+class ClearEventDataView(LoginRequiredMixin, SuperuserRequiredMixin, View):
+	def post(self, request, *args, **kwargs):
+		with transaction.atomic():
+			WorkshopList.objects.all().delete()
+			WorkshopPrintBatch.objects.all().delete()
+			Order.objects.all().delete()
+		messages.success(request, 'Alle Event-Daten wurden gelöscht. Benutzer und Laufzeit-Einstellungen bleiben erhalten.')
+		return HttpResponseRedirect(reverse('runtime-settings'))
+
+	def handle_no_permission(self):
+		return redirect('workshop-list')
+
+
+class TriggerWorkshopSyncView(LoginRequiredMixin, SuperuserRequiredMixin, View):
+	def post(self, request, *args, **kwargs):
+		try:
+			call_command('sync_workshops')
+		except Exception as exc:
+			messages.error(request, f'Workshop-Synchronisation fehlgeschlagen: {exc}')
+		else:
+			messages.success(request, 'Workshop-Synchronisation erfolgreich abgeschlossen.')
+		return HttpResponseRedirect(reverse('runtime-settings'))
+
+	def handle_no_permission(self):
+		return redirect('workshop-list')
 
 class OrderListView(LoginRequiredMixin, ListView):
 	model = Order
@@ -188,6 +260,10 @@ class WorkshopPrintBatchDownloadView(LoginRequiredMixin, View):
 		response['Content-Disposition'] = 'attachment; filename={}'.format(filename)
 		return response
 
+class WorkshopPrintBatchDeleteView(LoginRequiredMixin, DeleteView):
+	model = WorkshopPrintBatch
+	success_url = reverse_lazy('printbatch-list')
+
 class WorkshopAllDownloadView(LoginRequiredMixin, View):
 
 	def get(self, request, *args, **kwargs):
@@ -200,6 +276,7 @@ class WorkshopAllDownloadView(LoginRequiredMixin, View):
 		sheet.write(0, 3, "Workshop Nummer")
 		sheet.write(0, 4, "Zeitslot")
 		sheet.write(0, 5, "Ort")
+		sheet.write(0, 6, "Stimmen")
 		row = 1
 		for workshop in Workshop.objects.filter(status="V"):
 			sheet.write(row, 0, str(workshop.order.district))
@@ -211,6 +288,7 @@ class WorkshopAllDownloadView(LoginRequiredMixin, View):
 				sheet.write(row, 3, int(workshop.annotated_id))
 			sheet.write(row, 4, str(workshop.get_time_slot_display()))
 			sheet.write(row, 5, str(workshop.get_location_display()))
+			sheet.write(row, 6, workshop.voted_participants.count())
 			row += 1
 
 		workbook.close()
@@ -241,6 +319,35 @@ class ClanListDownloadView(LoginRequiredMixin, View):
 		workbook.close()
 		output.seek(0)
 		filename="Alle-Staemme.xlsx"
+		response = HttpResponse(output, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+		response['Content-Disposition'] = 'attachment; filename={}'.format(filename)
+		return response
+
+class BreakfastListDownloadView(LoginRequiredMixin, View):
+
+	def get(self, request, *args, **kwargs):
+		output = BytesIO()
+		workbook = Workbook(output)
+		sheet = workbook.add_worksheet("Stämme")
+		sheet.write(0, 0, "Diözese / Bezirk")
+		sheet.write(0, 1, "Stamm")
+		sheet.write(0, 2, "Name")
+		sheet.write(0, 3, "Anzahl Teilnehmende")
+		sheet.write(0, 4, "Brötchen")
+		sheet.write(0, 5, "Milch")
+		row = 1
+		for order in Order.objects.all():
+			sheet.write(row, 0, str(order.district))
+			sheet.write(row, 1, str(order.clan))
+			sheet.write(row, 2, str(f"{order.first_name} {order.last_name}"))
+			sheet.write(row, 3, order.participant_count)
+			sheet.write(row, 4, order.participant_count * 2)
+			sheet.write(row, 5, math.ceil(order.participant_count * 0.25))
+			row += 1
+
+		workbook.close()
+		output.seek(0)
+		filename="Fruehstueck.xlsx"
 		response = HttpResponse(output, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 		response['Content-Disposition'] = 'attachment; filename={}'.format(filename)
 		return response
@@ -359,3 +466,53 @@ class WorkshopLocationUpdateView(LoginRequiredMixin, UpdateView):
 		entry.user = self.request.user
 		entry.save()
 		return valid
+
+class VoteView(ListView):
+	model = Workshop
+	ordering = ['status', 'updated']
+	template_name = "base/vote.html"
+
+class WorkshopVoteListView(ListView):
+	model = Workshop
+	template_name = "base/workshop_votelist.html"
+	context_object_name = "workshops"
+
+	def dispatch(self, request, *args, **kwargs):
+		participant_id = request.GET.get("participant")
+		if not participant_id or not Participant.objects.filter(participant_id=participant_id).exists():
+			# Redirect to vote page or show error
+			return redirect("vote")  # or use messages and redirect
+		self.participant = Participant.objects.get(participant_id=participant_id)
+		return super().dispatch(request, *args, **kwargs)
+
+	def get_queryset(self):
+		# Nur Workshops mit annotated_id, aufsteigend sortiert
+		return Workshop.objects.exclude(annotated_id=None).order_by("annotated_id")
+
+	def get_context_data(self, **kwargs):
+		context = super().get_context_data(**kwargs)
+		context["participant_id"] = self.request.GET.get("participant")
+		context["voted_workshop_ids"] = list(self.participant.votes.values_list("id", flat=True))
+		context["participant_order_id"] = self.participant.order.id
+		return context
+	
+	def post(self, request, *args, **kwargs):
+		votes = request.POST.getlist("votes")
+		if len(votes) > 3:
+			messages.error(request, "Du kannst nur für maximal 3 Workshops abstimmen.")
+			return redirect(f"{request.path}?participant={self.participant.participant_id}")
+		else:
+			self.participant.votes.set(votes)
+			self.participant.save()
+			messages.success(request, "Deine Stimme wurde gespeichert.")
+			return redirect("vote")  # Redirect to VoteView after successful voting
+
+@csrf_exempt
+def check_qr_code(request):
+	if request.method == "POST":
+		import json
+		data = json.loads(request.body)
+		scanned_id = data.get("qr_code")
+		exists = Participant.objects.filter(participant_id=scanned_id).exists()
+		return JsonResponse({"exists": exists})
+	return JsonResponse({"error": "Invalid request"}, status=400)
