@@ -2,6 +2,42 @@ from django.conf import settings
 from django.contrib.auth.models import User
 from django.db.models import Model, CharField, TextField, PositiveIntegerField, DateTimeField, ForeignKey, CASCADE
 from django.db.models import BooleanField, SET_NULL, Sum, EmailField, ManyToManyField
+
+
+class RuntimeSetting(Model):
+	key = CharField(max_length=64, unique=True)
+	value = CharField(max_length=255)
+
+	def __str__(self):
+		return self.key
+
+
+def get_runtime_setting(key, default=None, cast=None):
+	try:
+		value = RuntimeSetting.objects.get(key=key).value
+	except RuntimeSetting.DoesNotExist:
+		value = default
+	if cast is not None and value is not None:
+		return cast(value)
+	return value
+
+
+def get_pretix_event():
+	return get_runtime_setting('PRETIX_EVENT', settings.PRETIX_EVENT)
+
+
+def get_pretix_auth_token():
+	return get_runtime_setting('PRETIX_AUTH_TOKEN', settings.PRETIX_AUTH_TOKEN)
+
+
+def get_pretix_workshop_product_id():
+	return get_runtime_setting('PRETIX_WORKSHOP_PRODUCT_ID', settings.PRETIX_WORKSHOP_PRODUCT_ID, int)
+
+
+def get_pretix_order_clan_product_id():
+	return get_runtime_setting('PRETIX_ORDER_CLAN_PRODUCT_ID', settings.PRETIX_ORDER_CLAN_PRODUCT_ID, int)
+
+
 class Order(Model):
 	clan = CharField(
 		max_length=64,
@@ -23,7 +59,7 @@ class Order(Model):
 	)
 
 	def get_pretix_url(self):
-		return f"{settings.PRETIX_URL}/control/event/{settings.PRETIX_ORGANIZER}/{settings.PRETIX_EVENT}/orders/{self.code}/"
+		return f"{settings.PRETIX_URL}/control/event/{settings.PRETIX_ORGANIZER}/{get_pretix_event()}/orders/{self.code}/"
 
 	def sufficient_workshops(self):
 		order_weq = 0
@@ -32,7 +68,7 @@ class Order(Model):
 		return max(1, int(self.participant_count / settings.WORKSHOPS_PER_PARTICIPANT)) <= order_weq
 
 	def get_pretix_user_url(self):
-		return f"{settings.PRETIX_URL}/{settings.PRETIX_ORGANIZER}/{settings.PRETIX_EVENT}/order/{self.code}/{self.secret}/"
+		return f"{settings.PRETIX_URL}/{settings.PRETIX_ORGANIZER}/{get_pretix_event()}/order/{self.code}/{self.secret}/"
 
 
 class WorkshopPrintBatch(Model):

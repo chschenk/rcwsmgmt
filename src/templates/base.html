@@ -33,6 +33,11 @@
         <li class="nav-item">
           <a class="nav-link text-white" href="{% url 'printbatch-list' %}">Druckaufträge</a>
         </li>
+        {% if user.is_superuser %}
+        <li class="nav-item">
+          <a class="nav-link text-white" href="{% url 'runtime-settings' %}">Einstellungen</a>
+        </li>
+        {% endif %}
         {% endif %}
         <li class="nav-item">
           <a class="nav-link text-white" href="{% url 'vote' %}">Abstimmen</a>

@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+{% load django_bootstrap5 %}
+
+{% block title %}Einstellungen{% endblock %}
+{% block header %}Einstellungen{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+	<h3>Workshop-Synchronisation</h3>
+	<p>Startet die Pretix-Synchronisation sofort und zeigt danach eine Rückmeldung an.</p>
+	<form method="post" action="{% url 'trigger-workshop-sync' %}">
+		{% csrf_token %}
+		<button type="submit" class="btn btn-outline-primary">Synchronisation jetzt ausführen</button>
+	</form>
+	<hr class="my-4">
+	<h3>Event-Daten löschen</h3>
+	<p>Diese Aktion entfernt Bestellungen, Workshops, Teilnehmende, Abstimmungen, Logeinträge, Workshoplisten und Druckaufträge. Benutzer und Laufzeit-Einstellungen bleiben erhalten.</p>
+	<form method="post" action="{% url 'clear-event-data' %}" onsubmit="return confirm('Wirklich alle Event-Daten löschen? Diese Aktion kann nicht rückgängig gemacht werden.');">
+		{% csrf_token %}
+		<button type="submit" class="btn btn-danger">Datenbank für neues Event leeren</button>
+	</form>
+	<hr class="my-4">
+	<h3>Event-Einstellungen</h3>
+	<p>Diese Werte überschreiben die Pretix-Konfiguration aus den Umgebungsvariablen zur Laufzeit.</p>
+	<form method="post">
+		{% csrf_token %}
+		{% bootstrap_form form %}
+		<button type="submit" class="btn btn-primary">Speichern</button>
+	</form>
+</div>
+{% endblock %}
