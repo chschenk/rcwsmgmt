@@ -1,9 +1,12 @@
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.mixins import UserPassesTestMixin
 from django.conf import settings
+from django.core.management import call_command
 from django.core.mail import send_mail
+from django.db import transaction
 from django.db.models import Max
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse, JsonResponse, HttpResponseRedirect
 from django.views.generic import ListView, DetailView, FormView, View, UpdateView, CreateView, DeleteView
 from django.views.generic.base import RedirectView
 from django.shortcuts import get_object_or_404
@@ -13,10 +16,76 @@ from django.urls import reverse, reverse_lazy
 from io import BytesIO
 from django.views.decorators.csrf import csrf_exempt
 from xlsxwriter import Workbook
-from base.models import  Workshop, Order, LogEntry, WorkshopPrintBatch, WorkshopList, Participant
+from base.models import  Workshop, Order, LogEntry, WorkshopPrintBatch, WorkshopList, Participant, RuntimeSetting
 from base.forms import WorkshopFeedbackForm, WorkshopAnnotateForm, WorkshopPrintForm, WorkshopAddToListForm
 from base.forms import WorkshopRemoveFromListForm
+from base.forms import RuntimeSettingsForm
 import math
+
+
+class SuperuserRequiredMixin(UserPassesTestMixin):
+	def test_func(self):
+		return self.request.user.is_superuser
+
+
+class RuntimeSettingsView(LoginRequiredMixin, SuperuserRequiredMixin, FormView):
+	form_class = RuntimeSettingsForm
+	template_name = "base/runtime_settings.html"
+
+	def get_initial(self):
+		initial = super().get_initial()
+		initial['auto_sync_enabled'] = RuntimeSetting.objects.filter(key='AUTO_SYNC_ENABLED').values_list('value', flat=True).first() != '0'
+		initial['pretix_event'] = RuntimeSetting.objects.filter(key='PRETIX_EVENT').values_list('value', flat=True).first() or settings.PRETIX_EVENT
+		initial['pretix_auth_token'] = RuntimeSetting.objects.filter(key='PRETIX_AUTH_TOKEN').values_list('value', flat=True).first() or settings.PRETIX_AUTH_TOKEN
+		initial['pretix_workshop_product_id'] = RuntimeSetting.objects.filter(key='PRETIX_WORKSHOP_PRODUCT_ID').values_list('value', flat=True).first() or settings.PRETIX_WORKSHOP_PRODUCT_ID
+		initial['pretix_order_clan_product_id'] = RuntimeSetting.objects.filter(key='PRETIX_ORDER_CLAN_PRODUCT_ID').values_list('value', flat=True).first() or settings.PRETIX_ORDER_CLAN_PRODUCT_ID
+		return initial
+
+	def form_valid(self, form):
+		settings_map = {
+			'AUTO_SYNC_ENABLED': '1' if form.cleaned_data['auto_sync_enabled'] else '0',
+			'PRETIX_EVENT': form.cleaned_data['pretix_event'],
+			'PRETIX_AUTH_TOKEN': form.cleaned_data['pretix_auth_token'],
+			'PRETIX_WORKSHOP_PRODUCT_ID': str(form.cleaned_data['pretix_workshop_product_id']),
+			'PRETIX_ORDER_CLAN_PRODUCT_ID': str(form.cleaned_data['pretix_order_clan_product_id']),
+		}
+		for key, value in settings_map.items():
+			RuntimeSetting.objects.update_or_create(key=key, defaults={'value': value})
+		messages.success(self.request, 'Laufzeit-Einstellungen wurden gespeichert.')
+		return super().form_valid(form)
+
+	def get_success_url(self):
+		return reverse('runtime-settings')
+
+	def handle_no_permission(self):
+		return redirect('workshop-list')
+
+
+class ClearEventDataView(LoginRequiredMixin, SuperuserRequiredMixin, View):
+	def post(self, request, *args, **kwargs):
+		with transaction.atomic():
+			WorkshopList.objects.all().delete()
+			WorkshopPrintBatch.objects.all().delete()
+			Order.objects.all().delete()
+		messages.success(request, 'Alle Event-Daten wurden gelöscht. Benutzer und Laufzeit-Einstellungen bleiben erhalten.')
+		return HttpResponseRedirect(reverse('runtime-settings'))
+
+	def handle_no_permission(self):
+		return redirect('workshop-list')
+
+
+class TriggerWorkshopSyncView(LoginRequiredMixin, SuperuserRequiredMixin, View):
+	def post(self, request, *args, **kwargs):
+		try:
+			call_command('sync_workshops')
+		except Exception as exc:
+			messages.error(request, f'Workshop-Synchronisation fehlgeschlagen: {exc}')
+		else:
+			messages.success(request, 'Workshop-Synchronisation erfolgreich abgeschlossen.')
+		return HttpResponseRedirect(reverse('runtime-settings'))
+
+	def handle_no_permission(self):
+		return redirect('workshop-list')
 
 class OrderListView(LoginRequiredMixin, ListView):
 	model = Order

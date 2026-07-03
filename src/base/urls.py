@@ -5,9 +5,12 @@ from base.views import WorkshopPrintBatchDownloadView, WorkshopPrintBatchDeleteV
 from base.views import WorkshopListCreateView, WorkshopListListView, WorkshopListDetailView, WorkshopListDeleteView
 from base.views import WorkshopAddToListFormView, WorkshopRemoveFromListFormView, WorkshopListDownloadView
 from base.views import WorkshopAllDownloadView, ClanListDownloadView, BreakfastListDownloadView, WorkshopLocationUpdateView
-from base.views import WorkshopVoteListView, VoteView, check_qr_code
+from base.views import WorkshopVoteListView, VoteView, check_qr_code, RuntimeSettingsView, ClearEventDataView, TriggerWorkshopSyncView
 urlpatterns = [
     path('', WorkshopListView.as_view(), name="workshop-list"),
+    path('settings/runtime', RuntimeSettingsView.as_view(), name='runtime-settings'),
+    path('settings/runtime/clear-event-data', ClearEventDataView.as_view(), name='clear-event-data'),
+    path('settings/runtime/trigger-sync', TriggerWorkshopSyncView.as_view(), name='trigger-workshop-sync'),
     path('workshop/<int:pk>/detail', WorkshopDetailView.as_view(), name='workshop-detail'),
     path('workshop/<int:pk>/addtolist', WorkshopAddToListFormView.as_view(), name='workshop-add-to-list'),
     path('workshop/<int:pk>/removefromlist/<int:wl_pk>', WorkshopRemoveFromListFormView.as_view(), name='workshop-remove-from-list'),
