@@ -91,6 +91,18 @@ class Workshop(Model):
 			return self.weq * 2
 		return self.weq
 
+class Participant(Model):
+	participant_id = CharField(max_length=64, verbose_name="Teilnehmer-ID", unique=True)
+	updated = DateTimeField(auto_now=True)
+	order = ForeignKey(Order, on_delete=CASCADE, related_name="participants")
+	votes = ManyToManyField(Workshop, blank=True, related_name="voted_participants")
+
+	def clean(self):
+		if self.votes.count() > 3:
+			raise ValidationError("A participant can vote for up to 3 workshops.")
+
+	def __str__(self):
+		return self.participant_id
 
 class LogEntry(Model):
 	workshop = ForeignKey(Workshop, on_delete=CASCADE)

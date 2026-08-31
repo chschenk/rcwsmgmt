@@ -3,6 +3,8 @@
 {% block title %}Bestellungen{% endblock %}
 {% block header %}Bestellungen{% endblock %}
 {% block actions %}
+<a href="{% url 'order-download' %}" class="btn btn-primary" role="button">Alle Downloaden</a>
+<a href="{% url 'breakfast-download' %}" class="btn btn-secondary" role="button">Frühstücksliste Downloaden</a>
 {% endblock %}
 {% block body %}
 {% if object_list %}
@@ -21,7 +23,7 @@
 		<tbody>
 			{% for order in object_list %}
 				<tr>
-					<th scope="row">{{order.code}}</th>
+					<th scope="row"><a href="{% url 'order-detail' order.id %}">{{order.code}}</a></th>
 					<th scope="row">{{order.district}}</th>
 					<th scope="row">{{order.clan}}</th>
 					<th scope="row">{{order.first_name}} {{order.last_name}}</th>
@@ -29,7 +31,7 @@
 					<td class="{% if order.sufficient_workshops %}bg-success{% else %}bg-danger{% endif %}">{{order.workshop_set.count}}</td>
 					<td>
 						<a href="{{order.get_pretix_url}}" class="btn btn-sm text-white" style="background-color: #7f5a91; border-color:#715081;" role="button">Bestellung in pretix öffnen</a>
-						<a href="{% url 'order-detail' order.pk %}" class="btn btn-primary btn-sm" role="button">Workshops ansehen</a>
+						<a href="{% url 'order-detail' order.pk %}" class="btn btn-primary btn-sm" role="button">Bestellung ansehen</a>
 					</td>
 				</tr>
 			{% endfor %}

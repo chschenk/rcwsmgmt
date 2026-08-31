@@ -35,6 +35,9 @@
         </li>
         {% endif %}
         <li class="nav-item">
+          <a class="nav-link text-white" href="{% url 'vote' %}">Abstimmen</a>
+        </li>
+        <li class="nav-item">
           {% if user.is_authenticated %}
             <a class="nav-link text-white" href="{% url 'logout' %}">Logout</a>
           {% else %}
@@ -57,12 +60,13 @@
             <h1 class="h1">{% block header %}{% endblock %}</h1>
             <div class="btn-toolbar mb-2 mb-md-0">
               <div class="btn-group me-2">
-				  {% block actions %}{% endblock %}
+                {% block actions %}{% endblock %}
               </div>
             </div>
           </div>
-			{% bootstrap_messages %}
-			{% block body %}{% endblock %}
+          {% bootstrap_messages %}
+          {% block content %}{% endblock %}
+          {% block body %}{% endblock %}
         </main>
       </div>
     </div>

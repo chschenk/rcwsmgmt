@@ -4,8 +4,8 @@
 {% block header %}Druckaufträge{% endblock %}
 {% block actions %}
 <a href="{% url 'printbatch-annotate' %}" class="btn btn-primary" role="button">Workshops durchnummerieren</a>
-<a href="{% url 'printbatch-create' %}" class="btn btn-success" role="button">Neuen Druckauftrag erstellen</a>
-<a href="{% url 'all-ws-download' %}" class="btn btn-success" role="button">Alle Workshops downloaden</a>
+<a href="{% url 'printbatch-create' %}" class="btn btn-secondary" role="button">Neuen Druckauftrag erstellen</a>
+<a href="{% url 'all-ws-download' %}" class="btn btn-primary" role="button">Alle Workshops downloaden</a>
 {% endblock %}
 {% block body %}
 {% if object_list %}
@@ -22,7 +22,10 @@
 				<tr>
 					<th scope="row">Druckauftrag {{batch.created}}</th>
 					<td>{{batch.workshop_set.all.count}}</td>
-					<td><a href="{% url 'printbatch-download' batch.id %}" class="btn btn-sm btn-success" role="button">Download</a></td>
+					<td>
+						<a href="{% url 'printbatch-download' batch.id %}" class="btn btn-sm btn-success" role="button">Download</a>
+						<a href="{% url 'printbatch-delete' batch.id %}" class="btn btn-sm btn-danger" role="button">Löschen</a>
+					</td>
 				</tr>
 			{% endfor %}
 		</tbody>

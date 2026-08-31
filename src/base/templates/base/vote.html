@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}Abstimmen{% endblock %}
+{% block header %}Abstimmen{% endblock %}
+{% block content %}
+
+<h2>Zum Abstimmen bitte Ticket scannen</h2>
+<div id="qr-reader" style="width:300px"></div>
+<div>
+    <label for="qr-file">Oder lade ein Bild hoch:</label>
+    <input type="file" id="qr-file" accept="image/*">
+</div>
+
+<!-- Include html5-qrcode library -->
+<script src="https://unpkg.com/html5-qrcode"></script>
+<script>
+    function onScanSuccess(decodedText, decodedResult) {
+
+        fetch('/api/check_qr_code/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ qr_code: decodedText })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.exists) {
+                // Redirect to workshop_votelist view with participant id
+                window.location.href = "/workshop_votelist/?participant=" + encodeURIComponent(decodedText);
+            } else {
+                alert("Ungültiger QR-Code. Bitte versuche es erneut.");
+            }
+        });
+    }
+
+    let qrScanner = new Html5Qrcode("qr-reader");
+    qrScanner.start(
+        { facingMode: "environment" },
+        {
+            fps: 10,
+            qrbox: 250
+        },
+        onScanSuccess
+    );
+    document.getElementById('qr-file').addEventListener('change', async function(e) {
+        if (e.target.files.length === 0) return;
+        const file = e.target.files[0];
+
+        // Stop the QR code scanner
+        await qrScanner.stop();
+
+        qrScanner.scanFile(file, true)
+            .then(onScanSuccess)
+            .catch(err => alert("Kein QR-Code im Bild gefunden."));
+    
+        // Optionally restart the scanner after processing the file
+        qrScanner.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, onScanSuccess);
+    });
+</script>
+{% endblock %}

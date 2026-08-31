@@ -1,7 +1,7 @@
 from django.conf import settings
 from django.core.mail import send_mail
 from django.core.management.base import BaseCommand
-from base.models import Order, Workshop, LogEntry
+from base.models import Order, Workshop, LogEntry, Participant
 from .pretix_api import PretixAPI
 
 # ToDo: Check
@@ -24,12 +24,6 @@ class Command(BaseCommand):
 
 		for order in orders:
 			try:
-				participant_count = 0
-				for position in order['positions']:
-					if position['item'] not in admission_product_ids:
-						continue
-					participant_count = participant_count + 1
-
 				try:
 					rc_order = Order.objects.get(code=order['code'])
 					if order['status'] not in VALID_ORDERS:
@@ -38,10 +32,11 @@ class Command(BaseCommand):
 				except Order.DoesNotExist:
 					if order['status'] in VALID_ORDERS:
 						rc_order = Order()
-						rc_order.participant_count = participant_count
 						rc_order.code = order['code']
 						rc_order.email = order['email']
 						rc_order.secret = order['secret']
+						# participant_count is non-nullable in the database, ensure a default
+						rc_order.participant_count = 0
 						rc_order.save()
 					else:
 						continue
@@ -68,6 +63,23 @@ class Command(BaseCommand):
 				rc_order.district = district_name
 				rc_order.first_name = first_name
 				rc_order.last_name = last_name
+				rc_order.save()
+
+				participant_count = 0
+				for position in order['positions']:
+					if position['item'] not in admission_product_ids:
+						continue
+					participant_count += 1
+					participant_id = position.get('secret')
+					if participant_id:
+						# Create or update Participant
+						participant, created = Participant.objects.get_or_create(
+							participant_id=participant_id,
+							order=rc_order
+						)
+						if not created:
+							participant.save()  # update timestamp
+
 				rc_order.participant_count = participant_count
 				rc_order.save()
 

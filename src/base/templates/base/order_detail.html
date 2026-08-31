@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 
-{% block title %}Workshop {{object.name}}{% endblock %}
-{% block header %}Workshop {{object.name}}{% endblock %}
+{% block title %}Bestellung{{object.name}}{% endblock %}
+{% block header %}Bestellung{{object.name}}{% endblock %}
 {% block actions %}
 	<a href="{{order.get_pretix_url}}" class="btn text-white" style="background-color: #7f5a91; border-color:#715081;" role="button">Bestellung in pretix öffnen</a>
 {% endblock %}

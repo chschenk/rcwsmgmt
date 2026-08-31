@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+
+{% block title %}Workshop Abstimmliste{% endblock %}
+{% block header %}Workshop Abstimmliste{% endblock %}
+{% block body %}
+<p>Bitte gib hier deine Stimme für die besten Workshops ab. Du kannst bis zu 3 Workshops auswählen. Deine Wahl kannst du jederzeit ändern, indem du deinen Code erneut scannst. Für die Workshops, die von deiner Runde angeboten werden, ist eine Abstimmung aus Fairnessgründen nicht möglich.</p>
+<form method="post">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-primary">Abstimmen</button>
+    {% if workshops %}
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th scope="col" colspan="2">Workshop Nummer</th>
+                    <th scope="col">Workshop Name</th>
+                    <th scope="col">Stamm</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for workshop in workshops %}
+                    {% if workshop.order.id == participant_order_id %}
+                            <tr>
+                                <td>
+                                    <input type="checkbox" disabled>
+                                </td>
+                                <td class="text-secondary">{{ workshop.annotated_id }}</td>
+                                <td class="text-secondary">{{ workshop.name }}</td>
+                                <td class="text-secondary">{{ workshop.order.clan }}</td>
+                            </tr>
+                    {% else %}
+                        <tr>
+                            <td>
+                                <input type="checkbox" name="votes" value="{{ workshop.id }}"
+                                    {% if workshop.id in voted_workshop_ids %}checked{% endif %}>
+                            </td>
+                            <td>{{ workshop.annotated_id }}</td>
+                            <td>{{ workshop.name }}</td>
+                            <td>{{ workshop.order.clan }}</td>
+                        </tr>
+                    {% endif %}
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+    Keine Workshops gefunden!
+    {% endif %}
+</form>
+{% endblock %}
